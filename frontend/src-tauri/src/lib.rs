@@ -57,7 +57,7 @@ use audio::{list_audio_devices, trigger_audio_permission, AudioDevice};
 use log::{error as log_error, info as log_info};
 use notifications::commands::NotificationManagerState;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Listener, Manager, Runtime};
 use tokio::sync::RwLock;
 
 static RECORDING_FLAG: AtomicBool = AtomicBool::new(false);
@@ -431,6 +431,43 @@ pub fn run() {
         )))
         .setup(|_app| {
             log::info!("Application setup complete");
+            let frontend_ready = Arc::new(AtomicBool::new(false));
+
+            if let Some(main_window) = _app.get_webview_window("main") {
+                let window_for_ready = main_window.clone();
+                let ready_flag = frontend_ready.clone();
+                _app.listen("frontend-ready", move |_event| {
+                    if ready_flag.swap(true, Ordering::SeqCst) {
+                        return;
+                    }
+
+                    log::info!("Frontend reported ready; showing main window");
+                    if let Err(e) = window_for_ready.show() {
+                        log::error!("Failed to show main window after frontend-ready: {}", e);
+                    }
+                    if let Err(e) = window_for_ready.set_focus() {
+                        log::warn!("Failed to focus main window after frontend-ready: {}", e);
+                    }
+                });
+
+                let window_for_timeout = main_window.clone();
+                let ready_flag = frontend_ready.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                    if ready_flag.load(Ordering::SeqCst) {
+                        return;
+                    }
+
+                    log::warn!(
+                        "Frontend-ready event not received within 15 seconds; showing main window anyway"
+                    );
+                    if let Err(e) = window_for_timeout.show() {
+                        log::error!("Failed to show main window after frontend-ready timeout: {}", e);
+                    }
+                });
+            } else {
+                log::warn!("Main window not found during setup; startup readiness gate disabled");
+            }
 
             // Initialize system tray
             if let Err(e) = tray::create_tray(_app.handle()) {

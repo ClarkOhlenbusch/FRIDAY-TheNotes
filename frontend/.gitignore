@@ -29,6 +29,7 @@ whisper-server-package/
 # next.js
 /.next/
 /out/
+/.tauri-native/
 
 # production
 /build

@@ -18,4 +18,6 @@ pub use gemini_provider::GeminiTranscriptionProvider;
 pub use parakeet_provider::ParakeetProvider;
 pub use provider::{TranscriptResult, TranscriptionError, TranscriptionProvider};
 pub use whisper_provider::WhisperProvider;
-pub use worker::{reset_speech_detected_flag, start_transcription_task, TranscriptUpdate};
+pub use worker::{
+    reset_speech_detected_flag, start_transcription_task, TranscriptUpdate, TranscriptionInput,
+};

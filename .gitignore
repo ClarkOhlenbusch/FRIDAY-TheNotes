@@ -18,6 +18,9 @@
 /coverage
 /dist
 
+# vendored dependencies
+/vendor
+
 # next.js
 /.next/
 /out/
@@ -75,6 +78,7 @@ node_modules/
 experiments/
 .cursor/
 target/
+target-tauri-dev-*/
 
 frontend/src-tauri/binaries/
 Cargo.lock

@@ -20,6 +20,7 @@ tokio = { version = "1.32.0", features = ["full"] }
 [patch.crates-io]
 cpal = { git = "https://github.com/RustAudio/cpal", rev = "51c3b43" }
 esaxx-rs = { git = "https://github.com/thewh1teagle/esaxx-rs.git", branch = "feat/dynamic-msvc-link" }
+whisper-rs-sys = { path = "vendor/whisper-rs-sys" }
 
 [profile.release.package.llama-helper]
 codegen-units = 1

@@ -274,10 +274,15 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
         let listener_id = app.listen("transcript-update", move |event: tauri::Event| {
             // Parse the transcript update from the event payload
             if let Ok(update) = serde_json::from_str::<TranscriptUpdate>(event.payload()) {
+                if !update.is_final {
+                    return;
+                }
+
                 // Create structured transcript segment
                 let segment = crate::audio::recording_saver::TranscriptSegment {
-                    id: format!("seg_{}", update.sequence_id),
+                    id: update.segment_id.clone(),
                     text: update.text.clone(),
+                    source_lane: Some(update.source_lane.clone()),
                     audio_start_time: update.audio_start_time,
                     audio_end_time: update.audio_end_time,
                     duration: update.duration,
@@ -449,10 +454,15 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
         let listener_id = app.listen("transcript-update", move |event: tauri::Event| {
             // Parse the transcript update from the event payload
             if let Ok(update) = serde_json::from_str::<TranscriptUpdate>(event.payload()) {
+                if !update.is_final {
+                    return;
+                }
+
                 // Create structured transcript segment
                 let segment = crate::audio::recording_saver::TranscriptSegment {
-                    id: format!("seg_{}", update.sequence_id),
+                    id: update.segment_id.clone(),
                     text: update.text.clone(),
+                    source_lane: Some(update.source_lane.clone()),
                     audio_start_time: update.audio_start_time,
                     audio_end_time: update.audio_end_time,
                     duration: update.duration,

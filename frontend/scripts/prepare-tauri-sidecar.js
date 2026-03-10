@@ -1,23 +1,103 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 
 const frontendDir = path.resolve(__dirname, '..');
 const workspaceRoot = path.resolve(frontendDir, '..');
 const helperDir = path.join(workspaceRoot, 'llama-helper');
 const binariesDir = path.join(frontendDir, 'src-tauri', 'binaries');
 
+function prependWindowsToolPaths() {
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  const candidateDirs = [
+    path.join(process.env.USERPROFILE || '', '.cargo', 'bin'),
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'CMake', 'bin'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'CMake', 'bin')
+  ].filter(Boolean);
+
+  const currentPath = process.env.PATH || '';
+  const existingEntries = new Set(currentPath.split(path.delimiter).filter(Boolean));
+  const dirsToPrepend = candidateDirs.filter((dir) => fs.existsSync(dir) && !existingEntries.has(dir));
+
+  if (dirsToPrepend.length > 0) {
+    process.env.PATH = `${dirsToPrepend.join(path.delimiter)}${path.delimiter}${currentPath}`;
+  }
+}
+
+function applyBuildResourceDefaults() {
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  if (!process.env.CMAKE_BUILD_PARALLEL_LEVEL) {
+    process.env.CMAKE_BUILD_PARALLEL_LEVEL = '4';
+  }
+
+  if (!process.env.CARGO_BUILD_JOBS) {
+    process.env.CARGO_BUILD_JOBS = '4';
+  }
+}
+
 function run(cmd, args, cwd) {
-  execFileSync(cmd, args, {
+  runCommand(cmd, args, {
     cwd,
     stdio: 'inherit'
   });
 }
 
+function quoteShellArg(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function runCommand(cmd, args, options = {}) {
+  try {
+    return execFileSync(cmd, args, options);
+  } catch (error) {
+    if (error && error.code === 'EPERM') {
+      return execSync([cmd, ...args].join(' '), options);
+    }
+
+    throw error;
+  }
+}
+
+function captureCommandOutput(cmd, args, options = {}) {
+  try {
+    return execFileSync(cmd, args, options);
+  } catch (error) {
+    if (!error || error.code !== 'EPERM') {
+      throw error;
+    }
+
+    const encoding = options.encoding || 'utf8';
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'friday-sidecar-'));
+    const outputPath = path.join(tempDir, 'stdout.txt');
+
+    try {
+      execSync(
+        `${[cmd, ...args].map(quoteShellArg).join(' ')} > ${quoteShellArg(outputPath)}`,
+        {
+          cwd: options.cwd,
+          env: options.env,
+          stdio: 'inherit'
+        }
+      );
+
+      return fs.readFileSync(outputPath, encoding);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+}
+
 function detectTargetTriple() {
-  const output = execFileSync('rustc', ['-vV'], {
+  const output = captureCommandOutput('rustc', ['-vV'], {
     cwd: workspaceRoot,
     encoding: 'utf8'
   });
@@ -101,6 +181,8 @@ function ensureSidecar(mode, feature) {
     throw new Error(`llama-helper directory not found at ${helperDir}`);
   }
 
+  prependWindowsToolPaths();
+  applyBuildResourceDefaults();
   fs.mkdirSync(binariesDir, { recursive: true });
 
   const targetTriple = detectTargetTriple();

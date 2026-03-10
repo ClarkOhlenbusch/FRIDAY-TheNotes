@@ -557,8 +557,21 @@ export function useSummaryGeneration({
       return `[${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}]`;
     };
 
+    const displaySpeakerForLane = (sourceLane?: string, fallback?: string) => {
+      if (sourceLane === 'mic_in') {
+        return 'Me';
+      }
+      if (sourceLane === 'system_out') {
+        return 'Them';
+      }
+      return fallback || 'Audio';
+    };
+
     const fullTranscript = allTranscripts
-      .map(t => `${formatTime(t.audio_start_time, t.timestamp)} ${t.text}`)
+      .map(t => {
+        const speaker = displaySpeakerForLane(t.source_lane, t.display_speaker || t.source);
+        return `${formatTime(t.audio_start_time, t.timestamp)} ${speaker}: ${t.text}`;
+      })
       .join('\n');
 
     await processSummary({ transcriptText: fullTranscript, customPrompt });

@@ -93,8 +93,13 @@ export function useTranscriptRecovery(): UseTranscriptRecoveryReturn {
   const loadMeetingTranscripts = useCallback(async (meetingId: string): Promise<StoredTranscript[]> => {
     try {
       const transcripts = await indexedDBService.getTranscripts(meetingId);
-      // Sort by sequence ID
-      transcripts.sort((a, b) => (a.sequenceId || 0) - (b.sequenceId || 0));
+      transcripts.sort((a, b) => {
+        const timeDiff = (a.audio_start_time || 0) - (b.audio_start_time || 0);
+        if (timeDiff !== 0) {
+          return timeDiff;
+        }
+        return (a.sequenceId || 0) - (b.sequenceId || 0);
+      });
       return transcripts;
     } catch (error) {
       console.error('Failed to load meeting transcripts:', error);
@@ -161,13 +166,18 @@ export function useTranscriptRecovery(): UseTranscriptRecoveryReturn {
 
       // 5. Convert StoredTranscripts to the format expected by storageService
       const formattedTranscripts = transcripts.map((t, index) => ({
-        id: t.id?.toString() || `${Date.now()}-${index}`,
+        id: (t as any).segment_id || t.id?.toString() || `${Date.now()}-${index}`,
         text: t.text,
         timestamp: t.timestamp,
         sequence_id: t.sequenceId || index,
         chunk_start_time: (t as any).chunk_start_time,
         is_partial: (t as any).is_partial || false,
+        is_final: (t as any).is_final ?? true,
         confidence: t.confidence,
+        source: (t as any).display_speaker || 'Audio',
+        source_lane: (t as any).source_lane,
+        display_speaker: (t as any).display_speaker || 'Audio',
+        segment_id: (t as any).segment_id || t.id?.toString() || `${index}`,
         audio_start_time: (t as any).audio_start_time,
         audio_end_time: (t as any).audio_end_time,
         duration: (t as any).duration,

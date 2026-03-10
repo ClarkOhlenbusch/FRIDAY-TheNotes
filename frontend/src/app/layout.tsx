@@ -8,8 +8,8 @@ import MainContent from '@/components/MainContent'
 import AnalyticsProvider from '@/components/AnalyticsProvider'
 import { Toaster, toast } from 'sonner'
 import "sonner/dist/styles.css"
-import { useState, useEffect, useCallback } from 'react'
-import { listen, UnlistenFn } from '@tauri-apps/api/event'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { emit, listen, UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { RecordingStateProvider } from '@/contexts/RecordingStateContext'
@@ -22,6 +22,7 @@ import { loadBetaFeatures } from '@/types/betaFeatures'
 import { DownloadProgressToastProvider } from '@/components/shared/DownloadProgressToast'
 import { UpdateCheckProvider } from '@/components/UpdateCheckProvider'
 import { RecordingPostProcessingProvider } from '@/contexts/RecordingPostProcessingProvider'
+import { RecordingSessionGuardProvider } from '@/contexts/RecordingSessionGuardProvider'
 import { ImportAudioDialog, ImportDropOverlay } from '@/components/ImportAudio'
 import { ImportDialogProvider } from '@/contexts/ImportDialogContext'
 import { isAudioExtension, getAudioFormatsDisplayList } from '@/constants/audioFormats'
@@ -61,6 +62,19 @@ function ConditionalImportDialog({
   );
 }
 
+function BootstrapScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+      <div className="flex items-center gap-3 rounded-full border border-border bg-card px-5 py-3 shadow-sm">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+        <span className="text-sm font-medium">Starting Friday...</span>
+      </div>
+    </div>
+  );
+}
+
+type AppMode = 'loading' | 'onboarding' | 'main';
+
 // export { metadata } from './metadata'
 
 export default function RootLayout({
@@ -68,8 +82,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const [showOnboarding, setShowOnboarding] = useState(false)
-  const [onboardingCompleted, setOnboardingCompleted] = useState(false)
+  const [appMode, setAppMode] = useState<AppMode>('loading')
+  const hasSignaledFrontendReadyRef = useRef(false)
 
   // Import audio state
   const [showDropOverlay, setShowDropOverlay] = useState(false)
@@ -81,22 +95,54 @@ export default function RootLayout({
     invoke<{ completed: boolean } | null>('get_onboarding_status')
       .then((status) => {
         const isComplete = status?.completed ?? false
-        setOnboardingCompleted(isComplete)
-
         if (!isComplete) {
           console.log('[Layout] Onboarding not completed, showing onboarding flow')
-          setShowOnboarding(true)
+          setAppMode('onboarding')
         } else {
           console.log('[Layout] Onboarding completed, showing main app')
+          setAppMode('main')
         }
       })
       .catch((error) => {
         console.error('[Layout] Failed to check onboarding status:', error)
         // Default to showing onboarding if we can't check
-        setShowOnboarding(true)
-        setOnboardingCompleted(false)
+        setAppMode('onboarding')
       })
   }, [])
+
+  useEffect(() => {
+    if (appMode === 'loading' || hasSignaledFrontendReadyRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const signalFrontendReady = async () => {
+      try {
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => resolve());
+          });
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        await emit('frontend-ready', { mode: appMode });
+        hasSignaledFrontendReadyRef.current = true;
+        console.log('[Layout] Signaled frontend-ready:', appMode);
+      } catch (error) {
+        console.warn('[Layout] Failed to emit frontend-ready:', error);
+      }
+    };
+
+    signalFrontendReady();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appMode]);
 
   // Disable context menu in production
   useEffect(() => {
@@ -111,7 +157,7 @@ export default function RootLayout({
     const unlisten = listen('request-recording-toggle', () => {
       console.log('[Layout] Received request-recording-toggle from tray');
 
-      if (showOnboarding) {
+      if (appMode !== 'main') {
         toast.error("Please complete setup first", {
           description: "You need to finish onboarding before you can start recording."
         });
@@ -125,7 +171,7 @@ export default function RootLayout({
     return () => {
       unlisten.then(fn => fn());
     };
-  }, [showOnboarding]);
+  }, [appMode]);
 
   // Handle file drop for audio import
   const handleFileDrop = useCallback((paths: string[]) => {
@@ -158,7 +204,7 @@ export default function RootLayout({
 
   // Listen for drag-drop events
   useEffect(() => {
-    if (showOnboarding) return; // Don't handle drops during onboarding
+    if (appMode !== 'main') return; // Only handle drops in the main app
 
     const unlisteners: UnlistenFn[] = [];
     const cleanedUpRef = { current: false };
@@ -206,7 +252,7 @@ export default function RootLayout({
       cleanedUpRef.current = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [showOnboarding, handleFileDrop]);
+  }, [appMode, handleFileDrop]);
 
   // Handle import dialog close
   const handleImportDialogClose = useCallback((open: boolean) => {
@@ -224,8 +270,8 @@ export default function RootLayout({
 
   const handleOnboardingComplete = () => {
     console.log('[Layout] Onboarding completed, reloading app')
-    setShowOnboarding(false)
-    setOnboardingCompleted(true)
+    setAppMode('main')
+    hasSignaledFrontendReadyRef.current = false
     // Optionally reload the window to ensure all state is fresh
     window.location.reload()
   }
@@ -233,48 +279,49 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${sourceSans3.variable} font-sans antialiased`}>
-        <AnalyticsProvider>
-          <RecordingStateProvider>
-            <TranscriptProvider>
-              <ConfigProvider>
-                <OllamaDownloadProvider>
-                  <OnboardingProvider>
-                    <UpdateCheckProvider>
-                      <SidebarProvider>
-                        <TooltipProvider>
-                          <RecordingPostProcessingProvider>
-                            <ImportDialogProvider onOpen={handleOpenImportDialog}>
-                              {/* Download progress toast provider - listens for background downloads */}
-                              <DownloadProgressToastProvider />
-
-                              {/* Show onboarding or main app */}
-                              {showOnboarding ? (
-                                <OnboardingFlow onComplete={handleOnboardingComplete} />
-                              ) : (
-                                <div className="flex">
-                                  <Sidebar />
-                                  <MainContent>{children}</MainContent>
-                                </div>
-                              )}
-                              {/* Import audio overlay and dialog */}
-                              <ImportDropOverlay visible={showDropOverlay} />
-                              <ConditionalImportDialog
-                                showImportDialog={showImportDialog}
-                                handleImportDialogClose={handleImportDialogClose}
-                                importFilePath={importFilePath}
-                              />
-                            </ImportDialogProvider>
-                          </RecordingPostProcessingProvider>
-                        </TooltipProvider>
-                      </SidebarProvider>
-                    </UpdateCheckProvider>
-                  </OnboardingProvider>
-
-                </OllamaDownloadProvider>
-              </ConfigProvider>
-            </TranscriptProvider>
-          </RecordingStateProvider>
-        </AnalyticsProvider>
+        {appMode === 'loading' ? (
+          <BootstrapScreen />
+        ) : (
+          <AnalyticsProvider>
+            <RecordingStateProvider>
+              <TranscriptProvider>
+                <ConfigProvider>
+                  <OllamaDownloadProvider>
+                    {appMode === 'onboarding' ? (
+                      <OnboardingProvider>
+                        <OnboardingFlow onComplete={handleOnboardingComplete} />
+                      </OnboardingProvider>
+                    ) : (
+                      <UpdateCheckProvider>
+                        <SidebarProvider>
+                          <TooltipProvider>
+                            <RecordingPostProcessingProvider>
+                              <RecordingSessionGuardProvider>
+                                <ImportDialogProvider onOpen={handleOpenImportDialog}>
+                                  <DownloadProgressToastProvider />
+                                  <div className="flex">
+                                    <Sidebar />
+                                    <MainContent>{children}</MainContent>
+                                  </div>
+                                  <ImportDropOverlay visible={showDropOverlay} />
+                                  <ConditionalImportDialog
+                                    showImportDialog={showImportDialog}
+                                    handleImportDialogClose={handleImportDialogClose}
+                                    importFilePath={importFilePath}
+                                  />
+                                </ImportDialogProvider>
+                              </RecordingSessionGuardProvider>
+                            </RecordingPostProcessingProvider>
+                          </TooltipProvider>
+                        </SidebarProvider>
+                      </UpdateCheckProvider>
+                    )}
+                  </OllamaDownloadProvider>
+                </ConfigProvider>
+              </TranscriptProvider>
+            </RecordingStateProvider>
+          </AnalyticsProvider>
+        )}
 
         <Toaster position="bottom-center" richColors closeButton />
       </body>

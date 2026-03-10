@@ -11,7 +11,12 @@ export interface Transcript {
   sequence_id?: number;
   chunk_start_time?: number; // Legacy field
   is_partial?: boolean;
+  is_final?: boolean;
   confidence?: number;
+  source?: string;
+  source_lane?: string;
+  display_speaker?: string;
+  segment_id?: string;
   // NEW: Recording-relative timestamps for playback sync
   audio_start_time?: number; // Seconds from recording start (e.g., 125.3)
   audio_end_time?: number;   // Seconds from recording start (e.g., 128.6)
@@ -22,9 +27,13 @@ export interface TranscriptUpdate {
   text: string;
   timestamp: string; // Wall-clock time for reference
   source: string;
+  source_lane: string;
+  display_speaker: string;
+  segment_id: string;
   sequence_id: number;
   chunk_start_time: number; // Legacy field
   is_partial: boolean;
+  is_final: boolean;
   confidence: number;
   // NEW: Recording-relative timestamps for playback sync
   audio_start_time: number; // Seconds from recording start
@@ -107,4 +116,7 @@ export interface TranscriptSegmentData {
   endTime?: number; // audio_end_time in seconds
   text: string;
   confidence?: number;
+  sourceLane?: string;
+  displaySpeaker?: string;
+  isFinal?: boolean;
 }

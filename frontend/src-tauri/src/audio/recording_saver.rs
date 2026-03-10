@@ -16,6 +16,7 @@ use super::recording_state::AudioChunk;
 pub struct TranscriptSegment {
     pub id: String,
     pub text: String,
+    pub source_lane: Option<String>,
     pub audio_start_time: f64, // Seconds from recording start
     pub audio_end_time: f64,   // Seconds from recording start
     pub duration: f64,         // Segment duration in seconds
@@ -137,6 +138,7 @@ impl RecordingSaver {
         let segment = TranscriptSegment {
             id: format!("seg_{}", chrono::Utc::now().timestamp_millis()),
             text,
+            source_lane: None,
             audio_start_time: 0.0,
             audio_end_time: 0.0,
             duration: 0.0,

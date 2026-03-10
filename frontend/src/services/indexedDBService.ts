@@ -23,6 +23,10 @@ export interface StoredTranscript {
   confidence: number;         // Whisper confidence score
   sequenceId: number;         // Sequence number for ordering
   storedAt: number;           // Unix timestamp when saved
+  source_lane?: string;       // Stable capture lane: mic_in | system_out
+  display_speaker?: string;   // User-facing lane label
+  segment_id?: string;        // Stable live segment identity
+  is_final?: boolean;         // Finalized transcript segment
   audio_start_time?: number;  // Recording-relative start time in seconds
   audio_end_time?: number;    // Recording-relative end time in seconds
   duration?: number;          // Duration in seconds

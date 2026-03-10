@@ -15,6 +15,7 @@
                 "title": "Friday",
                 "width": 1100,
                 "height": 700,
+                "visible": false,
                 "resizable": true,
                 "fullscreen": false,
                 "theme": "Light",

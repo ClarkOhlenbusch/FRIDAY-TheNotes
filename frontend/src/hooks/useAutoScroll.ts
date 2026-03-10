@@ -7,6 +7,7 @@ interface UseAutoScrollProps {
     isRecording: boolean;
     isPaused: boolean;
     activeSegmentId?: string;
+    activeSegmentSignature?: string;
     virtualizer?: Virtualizer<HTMLDivElement, Element>;
     virtualizationThreshold?: number;
     disableAutoScroll?: boolean; // Completely disable auto-scroll behavior (for meeting details page)
@@ -41,6 +42,7 @@ export function useAutoScroll({
     isRecording,
     isPaused,
     activeSegmentId,
+    activeSegmentSignature,
     virtualizer,
     virtualizationThreshold = 10,
     disableAutoScroll = false,
@@ -57,6 +59,7 @@ export function useAutoScroll({
     const isProgrammaticScrollRef = useRef(false);
     // Track previous segment count to detect new segments
     const prevSegmentCountRef = useRef(segments.length);
+    const prevSegmentSignatureRef = useRef('');
 
     /**
      * Check if the user is scrolled near the bottom
@@ -137,14 +140,24 @@ export function useAutoScroll({
 
         const segmentCount = segments.length;
         const prevCount = prevSegmentCountRef.current;
+        const prevSignature = prevSegmentSignatureRef.current;
+        const currentSignature = activeSegmentSignature ?? '';
         const hasNewSegments = segmentCount > prevCount;
+        const hasActiveSegmentChange = segmentCount > 0 && prevSignature !== currentSignature;
 
         // Update the ref for next comparison
         prevSegmentCountRef.current = segmentCount;
+        prevSegmentSignatureRef.current = currentSignature;
 
         // Only scroll if new segments arrived AND user is currently at bottom
         // Check isNearBottom() immediately to avoid race conditions with the debounced scroll handler
-        if (hasNewSegments && autoScrollRef.current && isRecording && !isPaused && segmentCount > 0) {
+        if (
+            (hasNewSegments || hasActiveSegmentChange) &&
+            autoScrollRef.current &&
+            isRecording &&
+            !isPaused &&
+            segmentCount > 0
+        ) {
             // Check if user is at bottom RIGHT NOW before scrolling
             const isCurrentlyAtBottom = isNearBottom();
             if (!isCurrentlyAtBottom) {
@@ -174,7 +187,17 @@ export function useAutoScroll({
                 isProgrammaticScrollRef.current = false;
             }, 150);
         }
-    }, [segments.length, isRecording, isPaused, useVirtualization, virtualizer, scrollRef, isNearBottom, disableAutoScroll]);
+    }, [
+        segments.length,
+        activeSegmentSignature,
+        isRecording,
+        isPaused,
+        useVirtualization,
+        virtualizer,
+        scrollRef,
+        isNearBottom,
+        disableAutoScroll,
+    ]);
 
     // Auto-scroll to active segment (when clicking on search results, etc.)
     useEffect(() => {

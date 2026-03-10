@@ -37,6 +37,11 @@ function convertTranscriptsToSegments(transcripts: Transcript[]): TranscriptSegm
         endTime: t.audio_end_time,
         text: t.text,
         confidence: t.confidence,
+        sourceLane: t.source_lane,
+        displaySpeaker:
+            t.display_speaker ||
+            (t.source_lane === 'mic_in' ? 'Me' : t.source_lane === 'system_out' ? 'Them' : t.source || 'Audio'),
+        isFinal: t.is_final ?? true,
     }));
 }
 

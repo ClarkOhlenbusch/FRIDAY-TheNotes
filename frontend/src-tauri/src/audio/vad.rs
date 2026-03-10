@@ -13,6 +13,13 @@ pub struct SpeechSegment {
     pub confidence: f32,
 }
 
+#[derive(Debug, Clone)]
+pub struct LiveSpeechPreview {
+    pub samples: Vec<f32>,
+    pub start_timestamp_ms: f64,
+    pub end_timestamp_ms: f64,
+}
+
 /// Processes audio in 30ms chunks but returns complete speech segments
 pub struct ContinuousVadProcessor {
     session: VadSession,
@@ -219,6 +226,25 @@ impl ContinuousVadProcessor {
         }
 
         Ok(completed_segments)
+    }
+
+    pub fn is_in_speech(&self) -> bool {
+        self.in_speech && !self.current_speech.is_empty()
+    }
+
+    pub fn current_speech_preview(&self) -> Option<LiveSpeechPreview> {
+        if !self.is_in_speech() {
+            return None;
+        }
+
+        let start_ms = (self.speech_start_sample as f64 / 16000.0) * 1000.0;
+        let end_ms = (self.processed_samples as f64 / 16000.0) * 1000.0;
+
+        Some(LiveSpeechPreview {
+            samples: self.current_speech.clone(),
+            start_timestamp_ms: start_ms,
+            end_timestamp_ms: end_ms,
+        })
     }
 
     fn process_chunk(&mut self, chunk: &[f32]) -> Result<()> {

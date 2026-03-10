@@ -20,6 +20,15 @@ export function useCopyOperations({
   aiSummary,
   blockNoteSummaryRef,
 }: UseCopyOperationsProps) {
+  const displaySpeakerForLane = useCallback((sourceLane?: string, fallback?: string) => {
+    if (sourceLane === 'mic_in') {
+      return 'Me';
+    }
+    if (sourceLane === 'system_out') {
+      return 'Them';
+    }
+    return fallback || 'Audio';
+  }, []);
 
   // Helper function to fetch ALL transcripts for copying (not just paginated data)
   const fetchAllTranscripts = useCallback(async (meetingId: string): Promise<Transcript[]> => {
@@ -86,7 +95,10 @@ export function useCopyOperations({
     const header = `# Transcript of the Meeting: ${meeting.id} - ${meetingTitle ?? meeting.title}\n\n`;
     const date = `## Date: ${new Date(meeting.created_at).toLocaleDateString()}\n\n`;
     const fullTranscript = allTranscripts
-      .map(t => `${formatTime(t.audio_start_time, t.timestamp)} ${t.text}  `)
+      .map(t => {
+        const speaker = displaySpeakerForLane(t.source_lane, t.display_speaker || t.source);
+        return `${formatTime(t.audio_start_time, t.timestamp)} ${speaker}: ${t.text}  `;
+      })
       .join('\n');
 
     await navigator.clipboard.writeText(header + date + fullTranscript);
@@ -102,7 +114,7 @@ export function useCopyOperations({
       transcript_length: allTranscripts.length.toString(),
       word_count: wordCount.toString()
     });
-  }, [meeting, meetingTitle, fetchAllTranscripts]);
+  }, [meeting, meetingTitle, fetchAllTranscripts, displaySpeakerForLane]);
 
   // Copy summary to clipboard
   const handleCopySummary = useCallback(async () => {
